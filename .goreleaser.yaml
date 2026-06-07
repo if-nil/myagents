@@ -1,0 +1,59 @@
+# goreleaser configuration. Cut a release by pushing a tag:
+#   git tag v0.1.0 && git push origin v0.1.0
+# A GitHub Actions workflow (.github/workflows/release.yml) runs goreleaser.
+version: 2
+
+project_name: myagents
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: myagents
+    main: ./cmd/myagents
+    binary: myagents
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - README.zh.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: if-nil
+    name: myagents
+  draft: false
+  prerelease: auto
