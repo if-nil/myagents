@@ -85,6 +85,7 @@ Two input modes, like vim's normal/insert:
 | `d` | remove an exited agent / forget a saved session |
 | `s` | open settings (layout, roster ratio) |
 | `PgUp`/`PgDn`, `Home`/`End`, mouse wheel | scroll the stage's scrollback |
+| `Ctrl-L` | force a full redraw (clears rendering artifacts; see [Windows 10 rendering quality](#windows-10-rendering-quality)) |
 | click an agent | select it |
 | click the stage | focus the agent and enter OPERATE mode |
 | `q` / `Ctrl-C` | quit |
@@ -105,7 +106,10 @@ history is kept by the AI CLI. Use `d` to forget a saved session, `r` to rename.
 
 Type as if you were in the AI CLI directly. `Ctrl-G` returns to MANAGE mode.
 Mouse clicks, drags, and wheel are forwarded to the agent, so tools that support
-the mouse (e.g. scrolling their own history) work as usual.
+the mouse (e.g. scrolling their own history) work as usual. `Shift+PgUp` /
+`Shift+PgDn` page through the stage's scrollback without leaving OPERATE mode —
+a keyboard fallback for when the wheel is unavailable (e.g. some Windows
+consoles).
 
 ### Roster status glyphs
 
@@ -194,6 +198,61 @@ agent only.
   emulator scrollback; scrollback browsing mainly helps shell-like agents.
 - Precise status currently covers Claude Code (`hook_style = "claude"`); other
   tools use the coarse output-activity heuristic until their hooks are wired.
+
+## Windows 10 rendering quality
+
+On Windows, each agent's terminal is hosted by **ConPTY**, which is frozen at
+your OS build. On Windows 10 (e.g. build 19044) that built-in ConPTY has two
+well-known problems that show up in the stage:
+
+- **Ghost characters** — wide-character (CJK) bugs leave stray characters that
+  the real input no longer contains and that backspace cannot delete.
+- **Dead scrollback** — it often repaints in place instead of scrolling, so the
+  emulator never accumulates history and the wheel appears to do nothing.
+
+**Quick mitigation:** press `Ctrl-L` (MANAGE mode) to force a full redraw — this
+makes the child replay its authoritative screen and flushes ghost cells.
+
+**Full fix — ship a newer ConPTY:** myAgents can load a redistributable
+`conpty.dll` instead of the OS one (the same approach VS Code / node-pty use).
+
+1. Download the MIT-licensed NuGet package
+   [`Microsoft.Windows.Console.ConPTY`](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY)
+   (a `.nupkg` is a zip — rename and extract it).
+2. Copy two files **next to `myagents.exe`**:
+   - `conpty.dll` from `runtimes/win-<arch>/native/conpty.dll`
+   - `OpenConsole.exe` from `build/native/runtimes/<arch>/OpenConsole.exe`
+
+   where `<arch>` matches `myagents.exe` (`x64` or `arm64`). They are a matched
+   pair — use the same package version for both.
+
+   > ⚠️ If `OpenConsole.exe` is missing beside `conpty.dll`, the dll **silently**
+   > falls back to the inbox `conhost.exe` and the old bugs return. There is no
+   > error — verify with the command below.
+
+3. Verify it took effect:
+
+   ```sh
+   myagents version
+   # myagents <version>
+   # conpty: C:\path\to\conpty.dll      ← redistributable active
+   # conpty: kernel32                   ← still the OS built-in
+   ```
+
+   A parenthesized note (e.g. `kernel32 (dll fallback: …)`) explains any
+   fallback.
+
+**Overrides** (environment variables):
+
+| Variable | Effect |
+| --- | --- |
+| `MYAGENTS_CONPTY=system` | force the OS built-in ConPTY (ignore any dll) |
+| `MYAGENTS_CONPTY_DLL=<path>` | load a specific `conpty.dll` |
+
+Requires Windows 10 1809+ (ConPTY's own minimum). The newer dll fixes the
+ghost-character bugs and improves scroll synthesis, but ConPTY still re-composes
+output rather than passing it through, so scrollback is not identical to a Unix
+PTY.
 
 ## Contributing
 

@@ -81,6 +81,7 @@ myagents claude   # 启动时直接起一个 agent
 | `d` | 移除已退出的 agent / 删除一个已保存会话 |
 | `s` | 打开设置(布局、管理区比例) |
 | `PgUp`/`PgDn`、`Home`/`End`、鼠标滚轮 | 滚动操作区的历史 |
+| `Ctrl-L` | 强制整屏重绘(清掉渲染残留;见 [Windows 10 渲染质量](#windows-10-渲染质量)) |
 | 点击会话 | 选中它 |
 | 点击操作区 | 聚焦该 agent 并进入操作模式 |
 | `q` / `Ctrl-C` | 退出 |
@@ -97,7 +98,9 @@ myagents claude   # 启动时直接起一个 agent
 ### 操作模式
 
 就当你直接在 AI CLI 里一样打字。`Ctrl-G` 返回管理模式。鼠标点击、拖动、滚轮都会转发给
-agent,所以支持鼠标的工具(比如滚自己的历史)照常可用。
+agent,所以支持鼠标的工具(比如滚自己的历史)照常可用。`Shift+PgUp` / `Shift+PgDn`
+可以在不退出操作模式的情况下翻看操作区的历史 —— 当滚轮不可用时(比如某些 Windows
+控制台)的键盘兜底。
 
 ### 列表状态符
 
@@ -176,6 +179,55 @@ env = ["CLAUDE_CODE_USE_BEDROCK=1", "AWS_REGION=us-east-1"]
 - 退出应用会终止所有 agent(暂无 detach/重连)。
 - 全屏应用(claude/codex)跑在备用屏,没有模拟器 scrollback;滚屏看历史主要对 shell 类 agent 有用。
 - 精确状态目前覆盖 Claude Code(`hook_style = "claude"`);其它工具在接入各自 hooks 前使用粗略的输出活跃度启发式。
+
+## Windows 10 渲染质量
+
+在 Windows 上,每个 agent 的终端由 **ConPTY** 托管,而 ConPTY 的版本被冻结在你的
+操作系统构建里。Windows 10(例如 build 19044)自带的 ConPTY 有两个众所周知的问题,
+会直接体现在操作区上:
+
+- **幽灵字符** —— 宽字符(中文/CJK)bug 会留下真实输入里并不存在、退格也删不掉的杂散字符。
+- **滚动失灵** —— 它经常原地重绘而不是真正滚动,导致模拟器从不积累历史,滚轮看起来没反应。
+
+**快速缓解:** 在管理模式按 `Ctrl-L` 强制整屏重绘 —— 让子进程重新发送它那份权威屏幕内容,
+冲掉幽灵字符。
+
+**彻底解决 —— 换一个更新的 ConPTY:** myAgents 可以加载一个可再分发的 `conpty.dll`
+来替代系统自带的(和 VS Code / node-pty 的做法一样)。
+
+1. 下载 MIT 许可的 NuGet 包
+   [`Microsoft.Windows.Console.ConPTY`](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY)
+   (`.nupkg` 本质是 zip —— 改名后解压)。
+2. 把两个文件复制到 **`myagents.exe` 旁边**:
+   - `conpty.dll`,来自 `runtimes/win-<arch>/native/conpty.dll`
+   - `OpenConsole.exe`,来自 `build/native/runtimes/<arch>/OpenConsole.exe`
+
+   其中 `<arch>` 要与 `myagents.exe` 匹配(`x64` 或 `arm64`)。两者是配套的 ——
+   请使用同一个包版本。
+
+   > ⚠️ 如果 `conpty.dll` 旁边缺了 `OpenConsole.exe`,dll 会**静默**回退到系统自带的
+   > `conhost.exe`,老问题又会回来。没有任何报错 —— 请用下面的命令确认。
+
+3. 确认是否生效:
+
+   ```sh
+   myagents version
+   # myagents <version>
+   # conpty: C:\path\to\conpty.dll      ← 可再分发 dll 已生效
+   # conpty: kernel32                   ← 仍是系统自带
+   ```
+
+   括号里的说明(如 `kernel32 (dll fallback: …)`)会解释任何回退原因。
+
+**环境变量覆盖:**
+
+| 变量 | 作用 |
+| --- | --- |
+| `MYAGENTS_CONPTY=system` | 强制使用系统自带 ConPTY(忽略任何 dll) |
+| `MYAGENTS_CONPTY_DLL=<path>` | 加载指定的 `conpty.dll` |
+
+需要 Windows 10 1809+(ConPTY 本身的最低要求)。更新的 dll 修复了幽灵字符 bug 并改善了
+滚动合成,但 ConPTY 依然是重新合成输出而非透传,所以 scrollback 仍无法与 Unix PTY 完全一致。
 
 ## 贡献
 
