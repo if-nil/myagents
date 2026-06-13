@@ -212,23 +212,42 @@ func (m *Model) handleManageKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.scrollBy(1 << 30) // clamped to top of scrollback
 	case "end":
 		m.scroll = 0
+	case "ctrl+l":
+		// Force a full redraw: clear our frame cache and the host terminal, and
+		// have the focused agent replay its screen (clears ghost cells left by
+		// frozen Windows 10 ConPTY wide-char bugs). Works with an empty roster.
+		m.frame = ""
+		if a := m.current(); a != nil {
+			a.ForceRepaint()
+		}
+		return tea.ClearScreen
 	}
 	return nil
 }
 
 // scrollBy moves the stage's scrollback offset up (positive) or down, clamped
-// to the focused Agent's available history.
+// to the focused Agent's available history. An upward scroll that cannot move
+// because the agent captured no scrollback (the common Windows 10 ConPTY case:
+// it repaints in place instead of scrolling) sets a notice so a dead wheel does
+// not look like a bug; any scroll that actually moves clears a stale notice.
 func (m *Model) scrollBy(delta int) {
 	a := m.current()
 	if a == nil {
 		return
 	}
+	prev := m.scroll
 	m.scroll += delta
 	if m.scroll < 0 {
 		m.scroll = 0
 	}
 	if max := a.ScrollbackLen(); m.scroll > max {
 		m.scroll = max
+	}
+	switch {
+	case m.scroll != prev:
+		m.notice = ""
+	case delta > 0 && a.ScrollbackLen() == 0:
+		m.notice = "no scrollback captured for this agent"
 	}
 }
 
@@ -309,6 +328,19 @@ func (m *Model) handleOperateKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	a := m.current()
 	if a == nil {
+		return nil
+	}
+	// Scroll the stage from operate mode without leaving it or disturbing the
+	// child: intercept shift+page-up/down before the scroll reset and before
+	// forwarding, so these keys page our scrollback instead of reaching the
+	// agent. (Keyboard fallback for when wheel scrolling is unavailable, e.g.
+	// old Windows consoles.)
+	switch msg.String() {
+	case "shift+pgup":
+		m.scrollBy(m.stageHeight() - 1)
+		return nil
+	case "shift+pgdown":
+		m.scrollBy(-(m.stageHeight() - 1))
 		return nil
 	}
 	m.scroll = 0 // any input returns to the live screen

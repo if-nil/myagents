@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/if-nil/myagents/internal/agent"
 	"github.com/if-nil/myagents/internal/config"
+	"github.com/if-nil/myagents/internal/conpty"
 	"github.com/if-nil/myagents/internal/store"
 	"github.com/if-nil/myagents/internal/tui"
 )
@@ -31,6 +32,12 @@ func main() {
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
 		fmt.Println("myagents", version)
+		// On Windows, report which ConPTY backend is active (kernel32 vs a
+		// redistributable conpty.dll) so users can confirm the dll took effect.
+		// Empty on non-Windows, where there is no ConPTY.
+		if b := conpty.Backend(); b != "" {
+			fmt.Println("conpty:", b)
+		}
 		return
 	}
 	if err := run(); err != nil {

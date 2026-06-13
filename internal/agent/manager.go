@@ -14,7 +14,6 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
-	"github.com/charmbracelet/x/xpty"
 )
 
 // modeDebugLog, when MYAGENTS_MODE_DEBUG names a file, receives a line per DEC
@@ -175,7 +174,7 @@ func (m *InProcessManager) Spawn(spec SpawnSpec) (*Agent, error) {
 		rows = defaultRows
 	}
 
-	pty, err := xpty.NewPty(cols, rows)
+	pty, err := newPty(cols, rows)
 	if err != nil {
 		return nil, fmt.Errorf("new pty: %w", err)
 	}

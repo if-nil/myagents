@@ -181,3 +181,32 @@ func TestEmptyCommandRejected(t *testing.T) {
 		t.Fatalf("err = %v, want ErrEmptyCommand", err)
 	}
 }
+
+func TestForceRepaintGuards(t *testing.T) {
+	m := NewInProcessManager()
+	defer m.Close()
+
+	// A live agent with a usable size keeps running across the resize jiggle.
+	a, err := m.Spawn(SpawnSpec{Command: []string{"/bin/sh", "-c", "sleep 30"}, Cols: 40, Rows: 8})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	waitFor(t, 2*time.Second, func() bool { return a.Snapshot().Status == StatusRunning })
+	a.ForceRepaint()
+	if got := a.Snapshot().Status; got != StatusRunning {
+		t.Errorf("status after ForceRepaint = %v, want running", got)
+	}
+
+	// A single-row PTY cannot give a row back after shrinking: ForceRepaint must
+	// be a no-op rather than resizing to zero rows.
+	a.Resize(40, 1)
+	a.ForceRepaint()
+	if _, rows, _ := a.pty.Size(); rows != 1 {
+		t.Errorf("rows after guarded ForceRepaint = %d, want 1 (unchanged)", rows)
+	}
+
+	// An exited agent is a no-op (must not touch a closed PTY).
+	_ = m.Kill(a.ID)
+	waitFor(t, 3*time.Second, func() bool { return a.Snapshot().Status != StatusRunning })
+	a.ForceRepaint() // must not panic
+}

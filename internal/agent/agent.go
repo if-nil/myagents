@@ -290,6 +290,28 @@ func (a *Agent) Resize(w, h int) {
 	_ = a.pty.Resize(w, h)
 }
 
+// ForceRepaint nudges the child to redraw its whole screen by briefly shrinking
+// the PTY by one row and restoring it. ConPTY only re-emits the full screen on
+// an actual size change (a same-size resize is a no-op), so jiggling the row
+// count makes it replay its authoritative buffer through the normal
+// PTY->emulator pump — flushing ghost cells that frozen Windows 10 ConPTY
+// wide-char bugs leave in our emulator. On Unix it merely triggers a couple of
+// harmless SIGWINCH redraws. The emulator is deliberately not resized here: the
+// replayed output flows through Write like any other child output.
+func (a *Agent) ForceRepaint() {
+	if !a.alive() {
+		return
+	}
+	a.mu.RLock()
+	w, h := a.cols, a.rows
+	a.mu.RUnlock()
+	if w < 1 || h < 2 {
+		return // need at least one row to give back after shrinking
+	}
+	_ = a.pty.Resize(w, h-1)
+	_ = a.pty.Resize(w, h)
+}
+
 // Render returns the Agent's current live screen as an ANSI string.
 func (a *Agent) Render() string {
 	a.emMu.Lock()

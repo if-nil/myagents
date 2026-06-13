@@ -315,13 +315,13 @@ func (m *Model) renderFooter() string {
 	switch m.mode {
 	case OperateMode:
 		badge = operateBadgeStyle.Render("OPERATE")
-		hints = footerStyle.Render(" ctrl+g back · keys → agent")
+		hints = footerStyle.Render(" ctrl+g back · shift+pgup/pgdn scroll · keys → agent")
 	default:
 		badge = manageBadgeStyle.Render("MANAGE")
 		if m.renaming {
 			hints = footerStyle.Render(" rename: type · ⏎ save · esc cancel")
 		} else {
-			hints = footerStyle.Render(" ↑↓ select · ⏎ operate · n new · r rename · x kill · d remove · s settings · q quit")
+			hints = footerStyle.Render(" ↑↓ select · ⏎ operate · n new · r rename · x kill · d remove · s settings · ctrl+l redraw · q quit")
 		}
 	}
 	if m.notice != "" {
